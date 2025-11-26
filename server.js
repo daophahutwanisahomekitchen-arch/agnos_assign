@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
@@ -28,6 +29,8 @@ app.prepare().then(() => {
   });
   // In-memory submissions store (simple for demo).
   const submissions = [];
+  // In-memory sessions store for live drafts keyed by sessionId
+  const sessions = {}; // { [sessionId]: { draft: {}, lastUpdated: ISOString } }
 
   io.on('connection', (socket) => {
     console.log('Client connected');
@@ -35,18 +38,63 @@ app.prepare().then(() => {
     // Send existing submissions to the newly connected client
     socket.emit('initial-submissions', submissions);
 
-    socket.on('input-change', (data) => {
-      socket.broadcast.emit('update-dashboard', data);
+    // If a staff client wants to know active drafts, emit current sessions
+    socket.emit('active-sessions', Object.keys(sessions).map((id) => ({ sessionId: id, draft: sessions[id].draft })));
+
+    // Patients should send { sessionId, data }
+    socket.on('input-change', (payload) => {
+      try {
+        const { sessionId, data } = payload || {};
+        if (sessionId) {
+          sessions[sessionId] = sessions[sessionId] || { draft: null, lastUpdated: null };
+          sessions[sessionId].draft = data;
+          sessions[sessionId].lastUpdated = new Date().toISOString();
+          // Broadcast update to staff/clients so they can show per-session drafts
+          io.emit('update-dashboard', { sessionId, data });
+        } else {
+          // fallback to old behavior when no sessionId provided
+          socket.broadcast.emit('update-dashboard', payload);
+        }
+      } catch (err) {
+        console.error('Error processing input-change', err);
+      }
     });
 
-    socket.on('form-submit', (data) => {
-      // Attach server-side metadata
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const submission = { ...data, id, submittedAt: new Date().toISOString(), reviewed: false };
-      // store newest first
-      submissions.unshift(submission);
-      // Broadcast authoritative submission to all clients (including sender)
-      io.emit('new-submission', submission);
+    socket.on('patient-session', ({ sessionId }) => {
+      if (!sessionId) return;
+      try {
+        socket.join(`session:${sessionId}`);
+        // ensure session exists
+        sessions[sessionId] = sessions[sessionId] || { draft: null, lastUpdated: null };
+        // Notify this socket of current draft (if any)
+        if (sessions[sessionId].draft) {
+          socket.emit('update-dashboard', { sessionId, data: sessions[sessionId].draft });
+        }
+      } catch (err) {
+        console.error('Error joining patient-session', err);
+      }
+    });
+
+    socket.on('leave-session', ({ sessionId }) => {
+      if (!sessionId) return;
+      try { socket.leave(`session:${sessionId}`); } catch { /* ignore */ }
+    });
+
+    // Expect { sessionId, data }
+    socket.on('form-submit', (payload) => {
+      try {
+        const { sessionId, data } = payload || {};
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const submission = { ...(data || payload), id, sessionId: sessionId || null, submittedAt: new Date().toISOString(), reviewed: false };
+        // store newest first
+        submissions.unshift(submission);
+        // remove session draft after successful submit
+        if (sessionId && sessions[sessionId]) delete sessions[sessionId];
+        // Broadcast authoritative submission to all clients (including sender)
+        io.emit('new-submission', submission);
+      } catch (err) {
+        console.error('Error processing form-submit', err);
+      }
     });
 
     socket.on('mark-reviewed', (id) => {

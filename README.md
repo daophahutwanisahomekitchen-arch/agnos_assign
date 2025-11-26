@@ -76,7 +76,7 @@ The project follows a standard Next.js App Router structure:
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Styling**: Tailwind CSS v4
 - **Real-time**: Socket.io
 - **Language**: TypeScript

@@ -5,6 +5,11 @@ import { socket } from '@/lib/socket';
 import { format, parseISO } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
 
+// Lightweight session id generator (no external deps)
+function generateSessionId() {
+  return 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+}
+
 interface DropdownOption {
   value: string | number;
   label: React.ReactNode;
@@ -370,6 +375,24 @@ function AddressAutocomplete({ value, onChange, error }: { value: string, onChan
 export default function PatientForm() {
   const [formData, setFormData] = useState(INITIAL_FORM);
 
+  // A stable session id per client/device (used to isolate drafts)
+  const sessionIdRef = useRef<string>(generateSessionId());
+  useEffect(() => {
+    // announce our patient session when this component mounts
+    try {
+      socket.emit('patient-session', { sessionId: sessionIdRef.current });
+    } catch (err) {
+      console.warn('Failed to emit patient-session', err);
+    }
+    return () => {
+      try {
+        socket.emit('leave-session', { sessionId: sessionIdRef.current });
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -435,7 +458,7 @@ export default function PatientForm() {
       });
     }
     
-    socket.emit('input-change', newData);
+    socket.emit('input-change', { sessionId: sessionIdRef.current, data: newData });
   };
 
   const currentStep = useMemo(() => {
@@ -454,11 +477,20 @@ export default function PatientForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      socket.emit('form-submit', formData);
+      const oldSession = sessionIdRef.current;
+      socket.emit('form-submit', { sessionId: oldSession, data: formData });
       // Show success UI and clear form
       setShowSuccess(true);
       setFormData(INITIAL_FORM);
       setErrors({});
+      // leave previous session and start a fresh one for the next registration
+      try {
+        socket.emit('leave-session', { sessionId: oldSession });
+      } catch {
+        /* ignore */
+      }
+      sessionIdRef.current = generateSessionId();
+      try { socket.emit('patient-session', { sessionId: sessionIdRef.current }); } catch { }
       // hide after a short delay
       setTimeout(() => setShowSuccess(false), 3200);
     } else {

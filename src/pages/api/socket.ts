@@ -1,16 +1,22 @@
 import { Server } from 'socket.io';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+type NextSocketWithServer = { server: { io?: Server; [k: string]: unknown } };
+
 const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
-  if ((res.socket as any).server.io) {
+  const server = (res.socket as unknown as NextSocketWithServer).server;
+  if (server.io) {
     console.log('Socket is already running');
   } else {
     console.log('Socket is initializing');
-    const io = new Server((res.socket as any).server, {
+    // `server` is the Next.js socket server (an http.Server). Cast to any here
+    // because Next's `res.socket.server` has custom properties in runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const io = new Server(server as any, {
       path: '/api/socket',
       addTrailingSlash: false,
     });
-    (res.socket as any).server.io = io;
+    server.io = io;
 
     io.on('connection', (socket) => {
       console.log('New client connected');
