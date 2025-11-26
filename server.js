@@ -4,10 +4,10 @@ const next = require('next');
 const { Server } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
 const port = process.env.PORT || 3000;
 
-const app = next({ dev, hostname, port });
+// Create Next without forcing a hostname so the host Render provides works correctly
+const app = next({ dev });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
@@ -68,7 +68,8 @@ app.prepare().then(() => {
     process.exit(1);
   });
 
-  httpServer.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
+  // Bind to 0.0.0.0 to accept external connections on Render
+  httpServer.listen(port, '0.0.0.0', () => {
+    console.log(`> Ready on port ${port} (listening on 0.0.0.0)`);
   });
 });

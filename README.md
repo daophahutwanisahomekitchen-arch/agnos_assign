@@ -25,20 +25,30 @@ A modern, real-time patient intake and staff dashboard application built with Ne
 
 ## Deployment
 
-Since we're using a custom server for the real-time features (Socket.io), this app needs a home that supports long-running Node.js processes. **Render** is a perfect choice for this!
+This app uses a custom Node server (Socket.io) and requires a host that supports long-running Node processes and WebSocket connections. Railway is a simple, free-friendly choice for this.
 
-**Why not Vercel?**
-Vercel is amazing for standard Next.js apps, but because we need a persistent WebSocket connection for the live dashboard, their serverless environment isn't the best fit here.
+Why not Vercel?
+Vercel's serverless functions are not ideal for persistent WebSocket servers. Use Railway, Render, Heroku, or another provider that supports long-lived Node processes.
 
-**How to Deploy on Render:**
+How to deploy on Railway (recommended)
 
-1. Push your code to a GitHub repository.
-2. Go to [Render](https://render.com) and create a new **Web Service**.
-3. Connect your GitHub repo.
-4. Render will automatically detect the settings, but just in case, double-check these:
-   - **Build Command:** `npm run build`
-   - **Start Command:** `npm start`
-5. Click **Create Web Service** and watch it go live! 🚀
+1. Push your code to a Git provider (GitHub/GitLab).
+2. Sign in to [Railway](https://railway.app) and create a new Project.
+3. Click **Deploy from GitHub** (or connect your repo) and select the repository.
+4. Railway will prompt for build/start commands — use:
+   - **Build command:** `npm run build`
+   - **Start command:** `npm start`
+5. Railway provides an environment variable `PORT` automatically; the app uses `process.env.PORT` in `server.js`, so no extra config is required.
+
+
+Quick local test (simulate production):
+
+```bash
+npm install
+npm run build
+npm start
+```
+
 
 ## Development Planning Documentation
 
